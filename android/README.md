@@ -202,22 +202,15 @@ touch look is fed into the port's mouselook code.
 
 ## The launcher icon
 
-The icons in `app/src/main/res/mipmap-*` are generated from a piece of
-artwork by `tools/icons/make_icons.py`:
+The icons in `app/src/main/res/mipmap-*` are made from the same artwork the
+desktop builds use, `dist/linux/io.github.perfect_dark_pc_port.perfect_dark.png`
+in the repository root, by NicNamSam.
 
-```
-python3 android/tools/icons/make_icons.py <artwork.jpg> android/app/src/main/res
-```
-
-It writes a square icon and a round one for older launchers, and an adaptive
-icon for API 26 and newer, with the artwork as the background and the
-wordmark as the foreground, so that the launcher's mask cannot cut the
-wordmark up.
-
-The artwork the current icons were made from is the Perfect Dark Game Boy
-Color box cover, which belongs to Nintendo. It is not in the repository, and
-the icons should be replaced with original artwork before the project is
-published.
+There is a square icon and a round one for older launchers, and an adaptive
+icon for API 26 and newer, with the artwork as the foreground and a soft
+gradient behind it, so that the launcher's mask cannot cut the mark up. The
+adaptive icon also has a monochrome layer, for launchers that tint the icon
+to match the system theme.
 
 ## Credits
 
