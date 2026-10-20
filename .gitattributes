@@ -1,0 +1,16 @@
+# The rest is text; let git normalise it. The specific rules below come
+# afterwards so that they win.
+* text=auto
+
+# Shell scripts have to keep Unix line endings, or they will not run on
+# Linux and macOS. Without this, a Windows checkout turns them into CRLF.
+android/gradlew text eol=lf
+gradlew text eol=lf
+*.sh text eol=lf
+
+# The CI workflow and the setup script are shell/python scripts underneath.
+.github/workflows/*.yml text eol=lf
+android/tools/setup/setup.py text eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf

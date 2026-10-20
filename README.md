@@ -40,6 +40,7 @@ There are minor graphics- and gameplay-related issues, and possibly occasional c
 * Linux: i686, x86_64
 * MacOS: x86_64 (OS 10.9+), arm64 (OS 11.0+)
 * Nintendo Switch: arm64
+* Android 7.0+: arm64-v8a, armeabi-v7a (see [android/README.md](android/README.md))
 
 ## Download
 
@@ -191,6 +192,51 @@ Controls can be rebound in `pd.ini`. Default control scheme is as follows:
    * Execute command: `make -C build -j4`
 8. The resulting executable will be at `build/pd.arm64.nro`.
 
+### Android
+
+The Android port is built from the same sources and produces an APK with
+SDL2 and the N64 code compiled in. The full instructions are in
+[android/README.md](android/README.md).
+
+1. Install the Android toolchain and cross-compile SDL2:
+   ```
+   python3 android/tools/setup/setup.py
+   source ../build-deps/env.sh
+   ```
+2. Configure and build the native library for each architecture:
+   ```
+   for ABI in arm64-v8a armeabi-v7a; do
+     cmake -S . -B "build-$ABI" \
+       -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+       -DANDROID_ABI="$ABI" \
+       -DANDROID_PLATFORM=android-24 \
+       -DANDROID_STL=c++_static \
+       -DROMID=ntsc-final \
+       -DCMAKE_BUILD_TYPE=Release \
+       -DSDL2_INCLUDE_DIR="$PWD/../build-deps/sdl2-android/$ABI/include/SDL2" \
+       -DSDL2_LIBRARY="$PWD/../build-deps/sdl2-android/$ABI/lib/libSDL2.so" \
+       -G Ninja
+     cmake --build "build-$ABI" -j"$(nproc)"
+   done
+   ```
+3. Copy the libraries into the APK's native library directory:
+   ```
+   for ABI in arm64-v8a armeabi-v7a; do
+     mkdir -p "android/app/src/main/jniLibs/$ABI"
+     cp "build-$ABI/android/libs/$ABI/libmain.so" "android/app/src/main/jniLibs/$ABI/"
+     cp "../build-deps/sdl2-android/$ABI/lib/libSDL2.so" "android/app/src/main/jniLibs/$ABI/"
+   done
+   ```
+4. Build the APK:
+   ```
+   cd android && ./gradlew assembleDebug
+   ```
+   The resulting APK will be at
+   `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+The ROM is not included in the APK. The app asks for it on the first run and
+copies it into the app's own storage.
+
 ### Notes
 
 Alternate compilers or toolchains can be specified by passing `-DCMAKE_TOOLCHAIN_FILE=whatever` as normal. The port does not build with Visual Studio.
@@ -210,5 +256,6 @@ It might be possible to build and run the game on platforms that are not specifi
 * Mouse Injector and 1964GEPD authors for some of the 60FPS- and mouselook-related fixes;
 * Raf for the 64-bit port;
 * NicNamSam for the icon;
+* the Android port contributors, for the touch controls and the Android build;
 * everyone who has submitted pull requests and issues to this repository and tested the port;
 * probably more I'm forgetting.

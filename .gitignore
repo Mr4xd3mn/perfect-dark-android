@@ -26,3 +26,13 @@ tools/mkrom/mkrom
 CppProperties.json
 .idea
 cmake-build-debug
+
+# Android build output
+/build-*/
+/android/.gradle/
+/android/local.properties
+/android/app/build/
+/android/app/src/main/jniLibs/
+
+# The icon generator's preview image
+/android/tools/icons/preview.png

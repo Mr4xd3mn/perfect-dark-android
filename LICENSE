@@ -19,3 +19,27 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Additional notice for the Android port (everything under android/ and the
+Android-specific changes in port/):
+
+Copyright (c) 2026 the Android port contributors
+
+These additions are released under the same MIT license as the rest of this
+repository.
+
+Perfect Dark is a trademark of Nintendo. No Nintendo code, audio or other
+game assets are included in this repository, and the game ROM is neither
+included nor downloaded; you must supply your own legally obtained copy of
+the ROM to run the game.
+
+The launcher icons under android/app/src/main/res/mipmap-* were generated
+from the Perfect Dark Game Boy Color box cover, which is Nintendo's artwork.
+They should be replaced with original artwork before this repository is
+published.
+
+The SDL2 Java classes under android/app/src/main/java/org/libsdl/app/ come
+from the SDL2 project and are used under the zlib license.
+
