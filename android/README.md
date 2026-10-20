@@ -67,6 +67,13 @@ source ../build-deps/env.sh
 The toolchain goes to `../build-deps` by default. Pass `--deps <dir>` to put
 it somewhere else.
 
+`--check-urls` only checks that the downloads are still available, which is
+useful when one of them has moved:
+
+```
+python3 android/tools/setup/setup.py --check-urls
+```
+
 SDL2 has to be built as a shared library, because the Android activity loads
 it by name. The port itself is built as `libmain.so`.
 

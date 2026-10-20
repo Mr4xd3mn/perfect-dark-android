@@ -105,9 +105,12 @@ class Setup:
         if name == "jdk":
             plat = "windows" if IS_WINDOWS else "linux"
             ext = "zip" if IS_WINDOWS else "tar.gz"
-            jdk = JDK_VERSION.replace("_", "")
+            # The release is tagged jdk-17.0.12+7, but the asset is named
+            # ..._17.0.12_7..., so the two spell the version differently.
+            tag = JDK_VERSION.replace("_", "+").replace("+", "%2B")
             return (f"https://github.com/adoptium/temurin17-binaries/releases/download/"
-                    f"jdk-{jdk}%2B7/OpenJDK17U-jdk_x64_{plat}_hotspot_{jdk}.{ext}")
+                    f"jdk-{tag}/"
+                    f"OpenJDK17U-jdk_x64_{plat}_hotspot_{JDK_VERSION}.{ext}")
         if name == "cmdline-tools":
             plat = "win" if IS_WINDOWS else "linux"
             return (f"https://dl.google.com/android/repository/"
@@ -297,9 +300,36 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--deps", default=default_deps,
                     help="where to put the downloaded toolchain")
+    ap.add_argument("--check-urls", action="store_true",
+                    help="only check that the download URLs are still valid")
     args = ap.parse_args()
 
-    Setup(args.deps).run_all()
+    setup = Setup(args.deps)
+
+    if args.check_urls:
+        bad = 0
+        for plat in ("windows", "linux"):
+            was = IS_WINDOWS
+            globals()["IS_WINDOWS"] = (plat == "windows")
+            for name in ("cmake", "ninja", "jdk", "cmdline-tools", "ndk", "sdl2"):
+                url = setup.url(name)
+                try:
+                    req = urllib.request.Request(
+                        url, method="HEAD", headers={"User-Agent": "setup.py"})
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        size = int(resp.headers.get("Content-Length", 0))
+                        print("OK   %-8s %-14s %8.1f MB" %
+                              (plat, name, size / 1e6))
+                except Exception as e:
+                    bad += 1
+                    print("FAIL %-8s %-14s %s" % (plat, name, e))
+            globals()["IS_WINDOWS"] = was
+        if bad:
+            raise SystemExit("%d url(s) are not valid" % bad)
+        print("all the download urls are valid")
+        return
+
+    setup.run_all()
 
 
 if __name__ == "__main__":
