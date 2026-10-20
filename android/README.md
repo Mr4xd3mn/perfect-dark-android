@@ -9,6 +9,8 @@ installing and playing the game is in [PLAY_ON_ANDROID.md](PLAY_ON_ANDROID.md).
 
 ## Status
 
+The Android port was written by Jamal Rjoob.
+
 The following has been added on top of the desktop port:
 
 * on-screen controls: a floating analog stick for movement, a relative drag
@@ -212,8 +214,15 @@ gradient behind it, so that the launcher's mask cannot cut the mark up. The
 adaptive icon also has a monochrome layer, for launchers that tint the icon
 to match the system theme.
 
+## Planned
+
+* [Mod support](https://github.com/Mr4xd3mn/perfect-dark-android/issues/1)
+* [Left and right handed control layouts](https://github.com/Mr4xd3mn/perfect-dark-android/issues/2)
+* [Gyro aiming](https://github.com/Mr4xd3mn/perfect-dark-android/issues/3)
+
 ## Credits
 
+* Jamal Rjoob, for the Android port, the on-screen controls and the build;
 * the original [decompilation project](https://github.com/n64decomp/perfect_dark) authors;
 * Ryan Dwyer and the [PC port](https://github.com/perfect-dark-pc-port/perfect_dark);
 * the [SDL2](https://github.com/libsdl-org/SDL) project, for the Android

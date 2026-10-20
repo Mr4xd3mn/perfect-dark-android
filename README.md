@@ -2,6 +2,8 @@
 
 This repository contains a work-in-progress port of the [Perfect Dark decompilation](https://github.com/n64decomp/perfect_dark) to modern platforms.
 
+This is a fork of the [PC port](https://github.com/perfect-dark-pc-port/perfect_dark) with an Android port added by [Jamal Rjoob](https://github.com/Mr4xd3mn). The game, the decompilation and the PC port are other people's work. See [android/README.md](android/README.md) for the Android port.
+
 To run the port, you must already have a Perfect Dark ROM, specifically one of the following:
 * `ntsc-final`/`US V1.1`/`US Rev 1` (md5 `e03b088b6ac9e0080440efed07c1e40f`).  
   **This is the recommended version to use**.  
@@ -256,6 +258,6 @@ It might be possible to build and run the game on platforms that are not specifi
 * Mouse Injector and 1964GEPD authors for some of the 60FPS- and mouselook-related fixes;
 * Raf for the 64-bit port;
 * NicNamSam for the icon;
-* the Android port contributors, for the touch controls and the Android build;
+* Jamal Rjoob, for the Android port and the on-screen touch controls;
 * everyone who has submitted pull requests and issues to this repository and tested the port;
 * probably more I'm forgetting.
