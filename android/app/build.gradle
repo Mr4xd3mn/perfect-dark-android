@@ -17,13 +17,6 @@ android {
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
-
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++11 -fexceptions -frtti"
-                arguments "-DROMID=ntsc-final"
-            }
-        }
     }
 
     signingConfigs {
@@ -50,8 +43,9 @@ android {
 
     sourceSets {
         main {
-            // Native libraries are built by CMake via externalNativeBuild and are
-            // packaged into the APK automatically by the Android Gradle Plugin.
+            // The native libraries are built by the CMakeLists.txt in the
+            // repository root and copied into src/main/jniLibs, where the
+            // Android Gradle Plugin packages them into the APK.
         }
     }
 }
