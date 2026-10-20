@@ -1,0 +1,89 @@
+name: Android CI
+
+on:
+  push:
+    branches: [ "port", "master", "main" ]
+  pull_request:
+    branches: [ "port", "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    env:
+      DEPS: ${{ github.workspace }}/../build-deps
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache the Gradle distribution
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/wrapper/dists
+            ~/.gradle/caches
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Set up the toolchain
+        run: |
+          python3 android/tools/setup/setup.py --deps "$DEPS"
+          echo "DEPS=$DEPS" >> "$GITHUB_ENV"
+
+      - name: Build the native library
+        run: |
+          source "$DEPS/env.sh"
+          for ABI in arm64-v8a armeabi-v7a; do
+            cmake -S . -B "build-$ABI" \
+              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$ABI" \
+              -DANDROID_PLATFORM=android-24 \
+              -DANDROID_STL=c++_static \
+              -DROMID=ntsc-final \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DSDL2_INCLUDE_DIR="$DEPS/sdl2-android/$ABI/include/SDL2" \
+              -DSDL2_LIBRARY="$DEPS/sdl2-android/$ABI/lib/libSDL2.so" \
+              -G Ninja
+            cmake --build "build-$ABI" -j"$(nproc)"
+          done
+
+      - name: Collect the native libraries
+        run: |
+          for ABI in arm64-v8a armeabi-v7a; do
+            mkdir -p "android/app/src/main/jniLibs/$ABI"
+            cp "build-$ABI/android/libs/$ABI/libmain.so" "android/app/src/main/jniLibs/$ABI/"
+            cp "$DEPS/sdl2-android/$ABI/lib/libSDL2.so" "android/app/src/main/jniLibs/$ABI/"
+          done
+
+      - name: Build the APK
+        run: |
+          source "$DEPS/env.sh"
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: perfect-dark-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Check that no ROM slipped into the APK
+        run: |
+          cd android/app/build/outputs/apk/debug
+          if unzip -l app-debug.apk | grep -Ei '\.z64$'; then
+            echo "::error::the ROM must not be shipped in the APK"
+            exit 1
+          fi
+          echo "no ROM in the APK"
