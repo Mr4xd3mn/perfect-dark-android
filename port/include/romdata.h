@@ -6,6 +6,9 @@
 extern u8 *g_RomFile;
 extern u32 g_RomFileSize;
 
+/* The file name of the ROM this build expects, e.g. "pd.ntsc-final.z64". */
+const char *romdataGetRomName(void);
+
 s32 romdataInit(void);
 
 u8 *romdataFileLoad(s32 fileNum, u32 *outSize);

@@ -9,6 +9,10 @@
 #include "gfx_window_manager_api.h"
 #include "gfx_screen_config.h"
 
+#ifdef __ANDROID__
+#include "touch.h"
+#endif
+
 static SDL_Window* wnd;
 static SDL_GLContext ctx;
 static SDL_Renderer* renderer;
@@ -207,6 +211,12 @@ static void gfx_sdl_init(const struct GfxWindowInitSettings *set) {
 
     SDL_ShowWindow(wnd);
 
+#ifdef __ANDROID__
+    // The on-screen controls need the window to work out the screen size and
+    // to hit-test touches against.
+    touchSetWindow(wnd);
+#endif
+
     qpc_freq = SDL_GetPerformanceFrequency();
 }
 
@@ -357,6 +367,10 @@ static void gfx_sdl_swap_buffers_begin(void) {
     if (target_fps) {
         sync_framerate_with_timer();
     }
+#ifdef __ANDROID__
+    // Draw the on-screen controls on top of the finished frame.
+    touchRenderOverlay();
+#endif
     SDL_GL_SwapWindow(wnd);
 }
 

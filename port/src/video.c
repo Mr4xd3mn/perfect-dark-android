@@ -13,11 +13,20 @@
 #include "../fast3d/gfx_sdl.h"
 #include "../fast3d/gfx_opengl.h"
 
+#ifdef __ANDROID__
+#include "touch.h"
+#endif
+
 #ifdef PLATFORM_NSWITCH
 #define DEFAULT_VID_WIDTH 1280
 #define DEFAULT_VID_HEIGHT 720
 #define DEFAULT_VID_FULLSCREEN true
 #define DEFAULT_VID_FULLSCREEN_EXCLUSIVE true
+#elif defined(__ANDROID__)
+#define DEFAULT_VID_WIDTH 0  // use the full screen width
+#define DEFAULT_VID_HEIGHT 0 // use the full screen height
+#define DEFAULT_VID_FULLSCREEN true
+#define DEFAULT_VID_FULLSCREEN_EXCLUSIVE false
 #else
 #define DEFAULT_VID_WIDTH 640
 #define DEFAULT_VID_HEIGHT 480
@@ -74,6 +83,40 @@ s32 videoInit(void)
 	wmAPI = &gfx_sdl;
 	renderingAPI = &gfx_opengl_api;
 
+#ifdef __ANDROID__
+	/*
+	 * Turn off SDL's synthetic mouse events.
+	 *
+	 * By default SDL turns every touch into a mouse click and mouse
+	 * movement. The port binds the fire button to the left mouse button,
+	 * so without this every touch - moving the stick, dragging to look
+	 * around - fired the gun and turned the camera. The on-screen
+	 * controls provide the mouse look themselves, so the synthetic
+	 * events are not wanted.
+	 */
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+
+	/*
+	 * SDL asks the Java side to lock the orientation when the window is
+	 * created, and it decides that from this hint. Without it SDL allows
+	 * both orientations, and the activity then follows the system's
+	 * auto-rotate setting instead of staying in landscape.
+	 */
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeRight LandscapeLeft");
+
+	// The window is the Android surface, so use the real screen dimensions.
+	SDL_DisplayMode displayMode;
+	if (SDL_GetCurrentDisplayMode(0, &displayMode) == 0) {
+		if (vidWidth == 0) {
+			vidWidth = displayMode.w;
+		}
+		if (vidHeight == 0) {
+			vidHeight = displayMode.h;
+		}
+		sysLogPrintf(LOG_NOTE, "Android: using screen dimensions %dx%d", vidWidth, vidHeight);
+	}
+#endif
+
 	gfx_current_native_viewport.width = 320;
 	gfx_current_native_viewport.height = 220;
 	gfx_current_native_aspect = 320.f / 220.f;
@@ -88,8 +131,13 @@ s32 videoInit(void)
 			.title = "Perfect Dark",
 			.width = vidWidth,
 			.height = vidHeight,
+#ifdef __ANDROID__
+			.x = 0,
+			.y = 0,
+#else
 			.x = 100,
 			.y = 100,
+#endif
 			.fullscreen = vidFullscreen,
 			.fullscreen_is_exclusive = vidFullscreenExclusive,
 			.maximized = vidMaximize,
@@ -99,6 +147,10 @@ s32 videoInit(void)
 	};
 
 	gfx_init(&set);
+
+#ifdef __ANDROID__
+	touchInit();
+#endif
 
 	videoInitDisplayModes();
 	videoSetVsync(vidVsync);

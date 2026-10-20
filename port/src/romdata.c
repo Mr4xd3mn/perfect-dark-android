@@ -11,6 +11,10 @@
 #include "preprocess.h"
 #include "platform.h"
 
+#ifdef __ANDROID__
+#include "android_rom.h"
+#endif
+
 /**
  * asset files and ROM segments can be replaced by optional external files,
  * but asset filenames still have to be either pulled from the ROM or from an
@@ -188,11 +192,30 @@ static inline void romdataWrongRomError(const char *fmt, ...)
 	sysFatalError("Wrong ROM file.\n%s\nEnsure that you have the correct " ROMDATA_ROM_DESC " ROM in z64 format.", reason);
 }
 
+const char *romdataGetRomName(void)
+{
+	return romName;
+}
+
 static inline void romdataLoadRom(void)
 {
-	sysLogPrintf(LOG_NOTE, "ROM file: %s", romName);
+	const char *romPath = romName;
 
-	g_RomFile = fsFileLoad(romName, &g_RomFileSize);
+#ifdef __ANDROID__
+	/*
+	 * The ROM is not shipped with the app. The player supplies their own
+	 * copy, which is copied into the app's internal storage; fall back to
+	 * an asset if one happens to be bundled.
+	 */
+	const char *userRom = androidRomPath(romName);
+	if (userRom) {
+		romPath = userRom;
+	}
+#endif
+
+	sysLogPrintf(LOG_NOTE, "ROM file: %s", romPath);
+
+	g_RomFile = fsFileLoad(romPath, &g_RomFileSize);
 
 	if (!g_RomFile) {
 		sysFatalError("Could not open ROM file %s.\nEnsure that it is in the %s directory.", romName, fsFullPath(""));

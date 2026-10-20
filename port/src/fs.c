@@ -11,6 +11,9 @@
 #include "platform.h"
 #include "utils.h"
 #include "fs.h"
+#ifdef __ANDROID__
+#include <SDL.h>
+#endif
 #ifdef PLATFORM_WIN32
 #include <direct.h>
 #endif
@@ -22,6 +25,41 @@ static char modDir[FS_MAXPATH + 1];  // replaces $M
 static char saveDir[FS_MAXPATH + 1]; // replaces $S
 static char homeDir[FS_MAXPATH + 1]; // replaces $H
 static char exeDir[FS_MAXPATH + 1];  // replaces $E
+
+#ifdef __ANDROID__
+/*
+ * On Android all game data is read from the APK's asset directory. SDL2
+ * routes SDL_RWFromFile() to the Android asset system (AAssetManager) for
+ * relative paths, so we use it here instead of talking to AAssetManager
+ * directly. That keeps the port independent of SDL2's internal JNI.
+ */
+static s32 fsAssetSize(const char *name)
+{
+	SDL_RWops *rw = SDL_RWFromFile(name, "rb");
+	if (!rw) {
+		return -1;
+	}
+	const Sint64 size = SDL_RWsize(rw);
+	SDL_RWclose(rw);
+	return size < 0 ? -1 : (s32)size;
+}
+
+static s32 fsAssetLoad(const char *name, void *dst, u32 dstSize)
+{
+	SDL_RWops *rw = SDL_RWFromFile(name, "rb");
+	if (!rw) {
+		return -1;
+	}
+	const Sint64 size = SDL_RWsize(rw);
+	if (size <= 0 || (u64)size > dstSize) {
+		SDL_RWclose(rw);
+		return -1;
+	}
+	const size_t read = SDL_RWread(rw, dst, 1, (size_t)size);
+	SDL_RWclose(rw);
+	return read == (size_t)size ? (s32)read : -1;
+}
+#endif
 
 static s32 fsPathIsWritable(const char *path)
 {
@@ -97,6 +135,29 @@ const char *fsFullPath(const char *relPath)
 s32 fsInit(void)
 {
 	sysGetExecutablePath(exeDir, FS_MAXPATH);
+
+#ifdef __ANDROID__
+	// On Android all game data lives in the APK's asset directory under
+	// "data/" (mirroring the desktop layout of <exe>/data). baseDir is set to
+	// "data" so fsFullPath() produces asset-relative paths such as
+	// "data/pd.ntsc-final.z64", which SDL2's Android asset backend resolves
+	// against the APK.
+	baseDir[0] = '\0';
+	strcpy(baseDir, DEFAULT_BASEDIR_NAME);
+	// Saves go to the app's internal storage directory.
+	const char *sd = SDL_AndroidGetInternalStoragePath();
+	if (sd && *sd) {
+		strncpy(saveDir, sd, FS_MAXPATH);
+	} else {
+		sysGetHomePath(saveDir, FS_MAXPATH);
+	}
+	saveDir[FS_MAXPATH] = '\0';
+	strncpy(homeDir, saveDir, FS_MAXPATH);
+	homeDir[FS_MAXPATH] = '\0';
+	sysLogPrintf(LOG_NOTE, "base dir: %s", baseDir);
+	sysLogPrintf(LOG_NOTE, "save dir: %s", saveDir);
+	return 0;
+#endif
 
 	// if this is set, default to exe path for everything
 	const s32 portable = sysArgCheck("--portable");
@@ -193,7 +254,11 @@ s32 fsFileLoadTo(const char *name, void *dst, u32 dstSize)
 
 	FILE *f = fopen(fullName, "rb");
 	if (!f) {
+#ifdef __ANDROID__
+		return fsAssetLoad(fullName, dst, dstSize);
+#else
 		return -1;
+#endif
 	}
 
 	fseek(f, 0, SEEK_END);
@@ -224,8 +289,31 @@ void *fsFileLoad(const char *name, u32 *outSize)
 
 	FILE *f = fopen(fullName, "rb");
 	if (!f) {
+#ifdef __ANDROID__
+		s32 size = fsAssetSize(fullName);
+		if (size < 0) {
+			sysLogPrintf(LOG_ERROR, "fsFileLoad: could not find file: %s", fullName);
+			return NULL;
+		}
+		void *buf = sysMemZeroAlloc(size + 1);
+		if (!buf) {
+			sysLogPrintf(LOG_ERROR, "fsFileLoad: could not alloc %d bytes for file: %s", size, fullName);
+			return NULL;
+		}
+		s32 read = fsAssetLoad(fullName, buf, size);
+		if (read < 0) {
+			sysMemFree(buf);
+			sysLogPrintf(LOG_ERROR, "fsFileLoad: could not read file: %s", fullName);
+			return NULL;
+		}
+		if (outSize) {
+			*outSize = (u32)read;
+		}
+		return buf;
+#else
 		sysLogPrintf(LOG_ERROR, "fsFileLoad: could not find file: %s", fullName);
 		return NULL;
+#endif
 	}
 
 	fseek(f, 0, SEEK_END);
@@ -263,7 +351,11 @@ s32 fsFileSize(const char *name)
 	const char *fullName = fsFullPath(name);
 	struct stat st;
 	if (stat(fullName, &st) < 0) {
+#ifdef __ANDROID__
+		return fsAssetSize(fullName);
+#else
 		return -1;
+#endif
 	} else {
 		return st.st_size;
 	}

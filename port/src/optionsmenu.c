@@ -15,6 +15,10 @@
 #include "input.h"
 #include "config.h"
 
+#ifdef __ANDROID__
+#include "touch.h"
+#endif
+
 static s32 g_ExtMenuPlayer = 0;
 static struct menudialogdef *g_ExtNextDialog = NULL;
 
@@ -385,6 +389,390 @@ struct menudialogdef g_ExtendedMouseMenuDialog = {
 	MENUDIALOGFLAG_LITERAL_TEXT,
 	NULL,
 };
+
+#ifdef __ANDROID__
+
+/* ------------------------------------------------------------------ */
+/* Touch controls options                                              */
+/* ------------------------------------------------------------------ */
+
+static MenuItemHandlerResult menuhandlerTouchEnabled(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return touchGetEnabled();
+	case MENUOP_SET:
+		touchSetEnabled(data->checkbox.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchShowGamepad(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return touchGetShowGamepad();
+	case MENUOP_SET:
+		touchSetShowGamepad(data->checkbox.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchShowZones(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return touchGetShowZones();
+	case MENUOP_SET:
+		touchSetShowZones(data->checkbox.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchHaptics(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return touchGetHaptics();
+	case MENUOP_SET:
+		touchSetHaptics(data->checkbox.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchLayout(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	static const char *opts[] = {
+		"Gamepad",
+		"Arc",
+		"Minimal",
+	};
+
+	switch (operation) {
+	case MENUOP_GETOPTIONCOUNT:
+		data->dropdown.value = ARRAYCOUNT(opts);
+		break;
+	case MENUOP_GETOPTIONTEXT:
+		return (intptr_t)opts[data->dropdown.value];
+	case MENUOP_GETSELECTEDINDEX:
+		data->dropdown.value = touchGetLayout();
+		break;
+	case MENUOP_SET:
+		touchSetLayout(data->dropdown.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchOpacity(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetOverlayOpacity() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetOverlayOpacity((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchStickSize(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetStickSize() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetStickSize((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchDeadzone(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetStickDeadzone() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetStickDeadzone((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchAimSens(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetAimSensitivity() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetAimSensitivity((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%.2f", (f32)data->slider.value / 100.f);
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchButtonScale(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetButtonScale() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetButtonScale((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchEditLayout(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET:
+		return touchGetEditMode();
+	case MENUOP_SET:
+		/* The editor takes over the screen, so the menu is closed by the
+		   item's CLOSESDIALOG flag. */
+		touchSetEditMode(1);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchResetLayout(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	if (operation == MENUOP_SET) {
+		touchResetLayout();
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchLookSensX(s32 operation, struct menuitem *item, union handlerdata *data){
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetLookSensX() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetLookSensX((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+		break;
+	}
+	return 0;
+}
+
+static MenuItemHandlerResult menuhandlerTouchLookSensY(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GETSLIDER:
+		data->slider.value = (s32)(touchGetLookSensY() * 100.f + 0.5f);
+		break;
+	case MENUOP_SET:
+		touchSetLookSensY((f32)data->slider.value / 100.f);
+		break;
+	case MENUOP_GETSLIDERLABEL:
+		sprintf(data->slider.label, "%d%%", data->slider.value);
+		break;
+	}
+	return 0;
+}
+
+struct menuitem g_ExtendedTouchMenuItems[] = {
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Touch Controls",
+		0,
+		menuhandlerTouchEnabled,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Show Gamepad",
+		0,
+		menuhandlerTouchShowGamepad,
+	},
+	{
+		MENUITEMTYPE_DROPDOWN,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Layout",
+		0,
+		menuhandlerTouchLayout,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Haptics",
+		0,
+		menuhandlerTouchHaptics,
+	},
+	{
+		MENUITEMTYPE_CHECKBOX,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Show Touch Zones",
+		0,
+		menuhandlerTouchShowZones,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Overlay Opacity",
+		100,
+		menuhandlerTouchOpacity,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Stick Size",
+		200,
+		menuhandlerTouchStickSize,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Stick Deadzone",
+		50,
+		menuhandlerTouchDeadzone,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Look Sensitivity X",
+		600,
+		menuhandlerTouchLookSensX,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Look Sensitivity Y",
+		600,
+		menuhandlerTouchLookSensY,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Aim Sensitivity",
+		600,
+		menuhandlerTouchAimSens,
+	},
+	{
+		MENUITEMTYPE_SLIDER,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_SLIDER_WIDE,
+		(uintptr_t)"Button Size",
+		160,
+		menuhandlerTouchButtonScale,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Edit Button Layout",
+		0,
+		menuhandlerTouchEditLayout,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Reset Button Layout",
+		0,
+		menuhandlerTouchResetLayout,
+	},
+	{
+		MENUITEMTYPE_SEPARATOR,
+		0,
+		0,
+		0,
+		0,
+		NULL,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
+		L_OPTIONS_213, // "Back"
+		0,
+		NULL,
+	},
+	{ MENUITEMTYPE_END },
+};
+
+struct menudialogdef g_ExtendedTouchMenuDialog = {
+	MENUDIALOGTYPE_DEFAULT,
+	(uintptr_t)"Touch Controls",
+	g_ExtendedTouchMenuItems,
+	NULL,
+	MENUDIALOGFLAG_LITERAL_TEXT,
+	NULL,
+};
+
+#endif /* __ANDROID__ */
 
 static MenuItemHandlerResult menuhandlerStickSpeed(s32 operation, struct menuitem *item, union handlerdata *data);
 static MenuItemHandlerResult menuhandlerStickDeadzone(s32 operation, struct menuitem *item, union handlerdata *data);
@@ -1970,6 +2358,16 @@ struct menuitem g_ExtendedMenuItems[] = {
 		0,
 		(void *)&g_ExtendedMouseMenuDialog,
 	},
+#ifdef __ANDROID__
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_OPENSDIALOG | MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"Touch\n",
+		0,
+		(void *)&g_ExtendedTouchMenuDialog,
+	},
+#endif
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,

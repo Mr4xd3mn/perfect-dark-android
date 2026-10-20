@@ -10,6 +10,15 @@
 #include "system.h"
 #include "platform.h"
 
+#ifdef __ANDROID__
+// Android NDK does not ship backtrace()/backtrace_symbols() by default.
+// Stub them out so the crash handler compiles; stack traces are unavailable.
+static inline void *backtrace_stub(void **buffer, int size) { (void)buffer; (void)size; return 0; }
+static inline char **backtrace_symbols_stub(void *const *buffer, int size) { (void)buffer; (void)size; return NULL; }
+#define backtrace(buffer, size) backtrace_stub(buffer, size)
+#define backtrace_symbols(buffer, size) backtrace_symbols_stub(buffer, size)
+#endif
+
 #define CRASH_LOG_FNAME "pd.crash.log"
 #define CRASH_MAX_MSG 8192
 #define CRASH_MAX_SYM 256

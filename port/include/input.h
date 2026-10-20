@@ -270,4 +270,18 @@ const char *inputGetClipboard(void);
 // returns keymod values
 u32 inputGetKeyModState(void);
 
+// Injects mouse movement, as if the mouse had moved by this many pixels.
+// Used by the on-screen look area so the port's mouselook drives the camera.
+void inputInjectMouseDelta(f32 dx, f32 dy);
+
+// Force a key to be reported as pressed, even though nothing physical was
+// pressed. Used to inject the game's "back" action on Android.
+void inputForceKey(u32 vk);
+
+// Returns 1 if the forced key has been acted upon by the game.
+s32 inputWasForcedKeyConsumed(u32 vk);
+
+// Removes a pending forced key.
+void inputClearForcedKey(u32 vk);
+
 #endif

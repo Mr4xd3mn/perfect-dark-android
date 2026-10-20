@@ -18,6 +18,11 @@
 #include "system.h"
 #include "utils.h"
 
+#ifdef __ANDROID__
+#include <SDL_main.h>
+#include "android_rom.h"
+#endif
+
 u32 g_OsMemSize = 0;
 s32 g_OsMemSizeMb = 16;
 u8 g_Is4Mb = 0;
@@ -93,9 +98,9 @@ static void cleanup(void)
 	// TODO: actually shut down all subsystems
 }
 
-int main(int argc, const char **argv)
+int main(int argc, char **argv)
 {
-	sysInitArgs(argc, argv);
+	sysInitArgs(argc, (const char **)argv);
 
 	if (!sysArgCheck("--no-crash-handler")) {
 		crashInit();
@@ -103,7 +108,39 @@ int main(int argc, const char **argv)
 
 	sysInit();
 	fsInit();
+
+#ifdef __ANDROID__
+	/*
+	 * The ROM is not bundled with the app, so ask the player for their own
+	 * copy before anything else is set up. This shows the system file
+	 * picker and returns once it has been answered. There is no time limit:
+	 * the player can browse for as long as they like.
+	 */
+	if (androidRomEnsure(romdataGetRomName())) {
+		if (androidRomGaveUp()) {
+			/* The player chose to leave, so just close the app. */
+			sysLogPrintf(LOG_NOTE, "no ROM was supplied, closing the app");
+			exit(0);
+		}
+		sysFatalError("A Perfect Dark ROM is required to play.\n\n"
+			"Please restart the app and choose your ROM when asked.");
+	}
+#endif
+
 	configInit();
+
+#ifdef __ANDROID__
+	/*
+	 * The on-screen controls need the "PC" control style: the second stick
+	 * moves the player and the mouse drives the camera. A pd.ini that was
+	 * copied from a desktop install could have this turned off, so it is
+	 * forced back on now that the config file has been read.
+	 */
+	for (s32 j = 0; j < MAX_PLAYERS; ++j) {
+		g_PlayerExtCfg[j].extcontrols = 1;
+	}
+#endif
+
 	videoInit();
 	inputInit();
 	audioInit();
@@ -170,6 +207,16 @@ PD_CONSTRUCTOR static void gameConfigInit(void)
 	configRegisterInt("Game.DisableMpDeathMusic", &g_MusicDisableMpDeath, 0, 1);
 	configRegisterInt("Game.GEMuzzleFlashes", &g_BgunGeMuzzleFlashes, 0, 1);
 	configRegisterInt("Game.MaxExplosions", &g_MaxExplosions, 6, 96);
+#ifdef __ANDROID__
+	/*
+	 * The "PC" control style is what makes the on-screen controls work the
+	 * way they are meant to: the second stick moves the player and the mouse
+	 * drives the camera. The on-screen look area feeds that mouse code.
+	 */
+	for (s32 j = 0; j < MAX_PLAYERS; ++j) {
+		g_PlayerExtCfg[j].extcontrols = 1;
+	}
+#endif
 	for (s32 j = 0; j < MAX_PLAYERS; ++j) {
 		const s32 i = j + 1;
 		configRegisterFloat(strFmt("Game.Player%d.FovY", i), &g_PlayerExtCfg[j].fovy, 5.f, 175.f);

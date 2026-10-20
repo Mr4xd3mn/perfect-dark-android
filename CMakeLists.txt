@@ -11,6 +11,14 @@ if(APPLE)
   endif()
 endif()
 
+if(ANDROID)
+  # Must be set before project() so the NDK toolchain picks it up. Linking the
+  # C++ runtime statically avoids having to ship libc++_shared.so in the APK.
+  if(NOT ANDROID_STL)
+    set(ANDROID_STL "c++_static" CACHE STRING "C++ runtime to use" FORCE)
+  endif()
+endif()
+
 project(pd C CXX)
 
 include(TargetArch)
@@ -43,6 +51,19 @@ if(TARGET_ARCH STREQUAL "i386")
   set(TARGET_ARCH "i686")
 endif()
 
+if(TARGET_OS STREQUAL "android")
+  # Cross-compilation cannot run try_run, so derive the arch from the NDK ABI.
+  if(ANDROID_ABI STREQUAL "arm64-v8a")
+    set(TARGET_ARCH "arm64")
+  elseif(ANDROID_ABI STREQUAL "armeabi-v7a")
+    set(TARGET_ARCH "arm")
+  elseif(ANDROID_ABI STREQUAL "x86_64")
+    set(TARGET_ARCH "x86_64")
+  elseif(ANDROID_ABI STREQUAL "x86")
+    set(TARGET_ARCH "i386")
+  endif()
+endif()
+
 # TODO
 set(TARGET_IS_BIG_ENDIAN FALSE)
 
@@ -67,6 +88,9 @@ elseif(APPLE)
 elseif(NINTENDO_SWITCH)
   # Switch
   set(TARGET_OS "nswitch")
+elseif(ANDROID)
+  # Android
+  set(TARGET_OS "android")
 elseif(UNIX)
   # Generic *nix; assume Linux
   set(TARGET_OS "linux")
@@ -78,6 +102,14 @@ endif()
 set(TARGET_PLATFORM "${TARGET_ARCH}-${TARGET_OS}")
 
 message(STATUS "Target platform: ${TARGET_PLATFORM}")
+
+if(TARGET_OS STREQUAL "android")
+  add_definitions(-D__ANDROID__ -DHAVE_SDL2 -DUSE_GLES2)
+  set(ANDROID_PLATFORM "android-24" CACHE STRING "Minimum Android API level")
+  # The NDK enables -Werror=format-security by default; the port uses runtime
+  # format strings in several places, so downgrade those to warnings.
+  add_compile_options(-Wno-error=format-security)
+endif()
 
 # Calculate version info and binary name
 
@@ -201,6 +233,9 @@ add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-function>)
 if (APPLE)
   # Make it look for libs in the executable folder manually since CMake's rpath system is wack
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rpath @executable_path")
+elseif(TARGET_OS STREQUAL "android")
+  # clang does not know this GCC warning option
+  add_compile_options(-Wno-unknown-warning-option)
 else()
   # This warning is not recognized by XCode/Clang for some reason.
   add_compile_options(-Wno-format-truncation)
@@ -218,6 +253,13 @@ if(NINTENDO_SWITCH)
     set(SDL2_LIBRARY "SDL2")
     set(SDL2_INCLUDE_DIR "${DEVKITPRO}/portlibs/switch/include/SDL2")
   endif()
+endif()
+if(TARGET_OS STREQUAL "android")
+  # SDL2's Android integration dlopen()s libmain.so and dlsym()s "SDL_main",
+  # so we link the shared libSDL2.so and must not link SDL2main (it would
+  # provide a conflicting main()). The shared library is also the one that
+  # carries SDL's JNI entry points (nativeSetupJNI/nativeRunMain).
+  set(SDL2MAIN_LIBRARY "" CACHE FILEPATH "SDL2main library" FORCE)
 endif()
 include_directories(SYSTEM "${SDL2_INCLUDE_DIR}")
 list(APPEND LIBS "${SDL2_LIBRARY}")
@@ -237,6 +279,8 @@ if(NOT GL_LIBRARY)
     set(GL_LIBRARY EGL glapi drm_nouveau)
   elseif(APPLE)
     set(GL_LIBRARY "-framework OpenGL")
+  elseif(TARGET_OS STREQUAL "android")
+    set(GL_LIBRARY GLESv2 EGL)
   else()
     set(GL_LIBRARY GL)
   endif()
@@ -249,6 +293,11 @@ if(NOT EXTRA_LIBRARIES)
     set(EXTRA_LIBRARIES dbghelp -static-libstdc++)
   elseif(NINTENDO_SWITCH)
     set(EXTRA_LIBRARIES stdc++ pthread)
+  elseif(TARGET_OS STREQUAL "android")
+    # No "stdc++" here: on Android the NDK toolchain links the C++ runtime
+    # itself (ANDROID_STL), and pulling in -lstdc++ would force the shared
+    # libc++_shared.so into the APK's dependency list.
+    set(EXTRA_LIBRARIES m dl log android EGL GLESv2 OpenSLES)
   else()
     set(EXTRA_LIBRARIES stdc++ m dl)
   endif()
@@ -340,13 +389,21 @@ add_custom_target(pd_headers ALL DEPENDS ${JSON_HEADERS})
 
 # Game target
 
-set(BIN_NAME "pd${BIN_REGION}.${TARGET_ARCH}")
-add_executable(pd ${SRC})
+if(TARGET_OS STREQUAL "android")
+  set(BIN_NAME "main")
+  add_library(pd SHARED ${SRC})
+else()
+  set(BIN_NAME "pd${BIN_REGION}.${TARGET_ARCH}")
+  add_executable(pd ${SRC})
+endif()
 add_dependencies(pd pd_headers)
 target_link_libraries(pd ${LIBS})
 set_target_properties(pd PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 if(WIN32)
   set_target_properties(pd PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+if(TARGET_OS STREQUAL "android")
+  set_target_properties(pd PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/android/libs/${ANDROID_ABI}")
 endif()
 
 # Additional commands for specific platforms.

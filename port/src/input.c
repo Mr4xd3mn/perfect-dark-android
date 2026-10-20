@@ -12,6 +12,13 @@
 #include "system.h"
 #include "fs.h"
 
+#ifdef __ANDROID__
+#include "touch.h"
+void androidInputUpdate(void);
+#endif
+
+#include <PR/os_cont.h>
+
 #if !SDL_VERSION_ATLEAST(2, 0, 14)
 // this was added in 2.0.14
 #define SDL_CONTROLLER_TYPE_VIRTUAL SDL_CONTROLLER_TYPE_UNKNOWN
@@ -74,9 +81,13 @@ static s32 connectedMask = 0;
 
 static s32 numJoysticks = 0;
 
+#ifdef __ANDROID__
+// HIDAPI causes receiver registration issues on Android, so leave it off.
+static s32 useHIDAPI = 0;
+#else
 static s32 useHIDAPI = 1;
+#endif
 static s32 useRawInput = 0;
-
 static s32 mouseEnabled = 1;
 static s32 mouseX, mouseY;
 static s32 mouseDX, mouseDY;
@@ -87,6 +98,32 @@ static s32 mouseLocked = 0;
 static s32 mouseLockMode = MLOCK_AUTO;
 static u64 mouseCursorTime = 0;
 static s32 mouseShowCursor = 1;
+
+/*
+ * Movement injected by the on-screen controls. It is fed into the mouse
+ * delta so the game's existing mouselook code drives the camera, which is
+ * how the port aims on the PC.
+ *
+ * The mouse delta is counted in whole pixels, so the fractional part is
+ * carried over to the next frame instead of being thrown away. Without
+ * that, a slow drag would be rounded down to nothing and the camera would
+ * not move at all.
+ */
+static f32 injectMouseDX = 0.f, injectMouseDY = 0.f;
+
+void inputInjectMouseDelta(f32 dx, f32 dy)
+{
+	const f32 fx = dx + injectMouseDX;
+	const f32 fy = dy + injectMouseDY;
+	const s32 ix = (s32)fx;
+	const s32 iy = (s32)fy;
+
+	injectMouseDX = fx - ix;
+	injectMouseDY = fy - iy;
+
+	mouseDX += ix;
+	mouseDY += iy;
+}
 
 static f32 mouseSensX = 2.5f;
 static f32 mouseSensY = 2.5f;
@@ -185,6 +222,40 @@ static const char *vkJoyNames[] = {
 static char vkNames[VK_TOTAL_COUNT][64];
 
 static s8 vkPrevState[VK_TOTAL_COUNT];
+
+/*
+ * Forced (virtual) keys. These let the platform layer inject a key press
+ * that has no physical counterpart - on Android the hardware back button is
+ * delivered as the game's "back" action (Escape).
+ */
+static s8 vkForced[VK_TOTAL_COUNT];
+static s8 vkForcedConsumed[VK_TOTAL_COUNT];
+static u16 vkForcedAge[VK_TOTAL_COUNT];
+
+void inputForceKey(u32 vk)
+{
+	if (vk >= VK_TOTAL_COUNT) {
+		return;
+	}
+	vkForced[vk] = 1;
+	vkForcedConsumed[vk] = 0;
+	vkForcedAge[vk] = 0;
+}
+
+s32 inputWasForcedKeyConsumed(u32 vk)
+{
+	if (vk >= VK_TOTAL_COUNT) {
+		return 0;
+	}
+	return vkForcedConsumed[vk];
+}
+
+void inputClearForcedKey(u32 vk)
+{
+	if (vk < VK_TOTAL_COUNT) {
+		vkForced[vk] = 0;
+	}
+}
 
 void inputSetDefaultKeyBinds(s32 cidx, s32 n64mode)
 {
@@ -541,6 +612,14 @@ static int inputEventFilter(void *data, SDL_Event *event)
 			}
 			break;
 
+#ifdef __ANDROID__
+		case SDL_FINGERDOWN:
+		case SDL_FINGERMOTION:
+		case SDL_FINGERUP:
+			touchHandleEvent(event);
+			return 1;
+#endif
+
 		case SDL_TEXTINPUT:
 			if (!lastChar && event->text.text[0] && (u8)event->text.text[0] < 0x80) {
 				lastChar = event->text.text[0];
@@ -679,6 +758,19 @@ static inline void inputLoadBinds(void)
 
 s32 inputInit(void)
 {
+#ifdef __ANDROID__
+	/*
+	 * Turn off SDL's synthetic mouse events.
+	 *
+	 * By default SDL turns every touch into a mouse click and mouse
+	 * movement. The port binds the fire button to the left mouse button,
+	 * so without this every touch - moving the stick, dragging to look
+	 * around - fired the gun and turned the camera. The on-screen
+	 * controls provide the mouse look themselves.
+	 */
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
+
 	// Set SDL hints before initializing the controller subsystem.
 	if (useHIDAPI) {
 #if SDL_VERSION_ATLEAST(2, 0, 12)
@@ -723,6 +815,7 @@ s32 inputInit(void)
 	if (!SDL_WasInit(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC)) {
 		SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER | SDL_INIT_HAPTIC);
 	}
+
 
 	// try to load controller db from an external file in the save folder
 	if (fsFileSize("$S/" CONTROLLERDB_FNAME)) {
@@ -792,6 +885,67 @@ static inline s32 inputAxisScale(s32 x, const s32 deadzone, const f32 scale)
 	}
 }
 
+#ifdef __ANDROID__
+/*
+ * Applies the on-screen controls to the pad.
+ *
+ * In the port's "PC" control style the second stick drives movement and the
+ * mouse drives the camera, so the movement stick is written to the second
+ * stick here, and the camera is driven by the look delta that
+ * touchGetLookDelta() hands to the mouse code. The first stick is held at
+ * zero so the on-screen stick can never turn the camera.
+ *
+ * In a menu it is the other way around: the menu navigates with the first
+ * stick, and a tap stands in for the accept button.
+ */
+static void inputApplyTouchControls(s32 idx, OSContPad *npad)
+{
+	/* The on-screen controls belong to player one only. */
+	if (idx != 0) {
+		return;
+	}
+
+	f32 lx = 0.f, ly = 0.f;
+	touchGetLeftStick(&lx, &ly);
+	const u32 tbtn = touchGetButtons() | touchGetTapButton();
+
+	/* While the layout editor is open the buttons are being dragged around,
+	   so nothing is passed to the game. */
+	if (touchGetEditMode()) {
+		npad->stick_x = 0;
+		npad->stick_y = 0;
+		npad->rstick_x = 0;
+		npad->rstick_y = 0;
+		return;
+	}
+
+	if (touchIsInMenu()) {
+		if (lx != 0.f || ly != 0.f) {
+			npad->stick_x = (s8)(lx * 127.f);
+			npad->stick_y = (s8)(ly * 127.f);
+		}
+		npad->rstick_x = 0;
+		npad->rstick_y = 0;
+		if (tbtn) {
+			npad->button |= tbtn;
+		}
+		if (touchGetMenuAccept()) {
+			npad->button |= CONT_A;
+		}
+	} else {
+		npad->stick_x = 0;
+		npad->stick_y = 0;
+		if (lx != 0.f || ly != 0.f) {
+			npad->rstick_x = (s8)(lx * 127.f);
+			npad->rstick_y = (s8)(ly * 127.f);
+		}
+		if (tbtn) {
+			npad->button |= tbtn;
+		}
+	}
+}
+#endif
+
 s32 inputReadController(s32 idx, OSContPad *npad)
 {
 	if (idx < 0 || idx >= INPUT_MAX_CONTROLLERS  || !npad) {
@@ -830,6 +984,15 @@ s32 inputReadController(s32 idx, OSContPad *npad)
 			npad->button &= ~(U_CBUTTONS | D_CBUTTONS);
 		}
 	}
+
+#ifdef __ANDROID__
+	/*
+	 * The on-screen controls are applied before the physical controller is
+	 * consulted, and before the early-out below, so they work on a device
+	 * with no controller attached at all.
+	 */
+	inputApplyTouchControls(idx, npad);
+#endif
 
 	if (!pads[idx]) {
 		return 0;
@@ -872,6 +1035,16 @@ s32 inputReadController(s32 idx, OSContPad *npad)
 			npad->rstick_y = (rStickY == 128) ? 127 : rStickY;
 		}
 	}
+
+#ifdef __ANDROID__
+	/*
+	 * Apply the on-screen controls again, so they always win over the
+	 * physical controller. This keeps the on-screen stick strictly bound to
+	 * movement, and stops a physical controller from moving the on-screen
+	 * buttons around.
+	 */
+	inputApplyTouchControls(idx, npad);
+#endif
 
 	return 0;
 }
@@ -925,6 +1098,33 @@ void inputUpdate(void)
 	if (mouseEnabled) {
 		inputUpdateMouse();
 	}
+
+#ifdef __ANDROID__
+	/*
+	 * The on-screen look area provides the camera movement. It is fed into
+	 * the mouse delta so the port's own mouselook code drives the camera,
+	 * exactly like it does on the PC.
+	 */
+	{
+		f32 ldx, ldy;
+		touchGetLookDelta(&ldx, &ldy);
+		if (ldx != 0.f || ldy != 0.f) {
+			inputInjectMouseDelta(ldx, ldy);
+		}
+	}
+
+	/* Expire forced keys that nothing acted on, so they cannot fire much
+	   later when a menu finally opens. */
+	for (u32 i = 0; i < VK_TOTAL_COUNT; ++i) {
+		if (vkForced[i]) {
+			if (++vkForcedAge[i] > 240) {
+				vkForced[i] = 0;
+			}
+		}
+	}
+
+	androidInputUpdate();
+#endif
 }
 
 s32 inputControllerConnected(s32 idx)
@@ -1177,6 +1377,9 @@ const u32 *inputKeyGetBinds(s32 idx, u32 ck)
 s32 inputKeyPressed(u32 vk)
 {
 	if (vk >= VK_KEYBOARD_BEGIN && vk < VK_MOUSE_BEGIN) {
+		if (vkForced[vk]) {
+			return 1;
+		}
 		const u8 *state = SDL_GetKeyboardState(NULL);
 		return state[vk - VK_KEYBOARD_BEGIN];
 	}
@@ -1208,6 +1411,10 @@ s32 inputKeyJustPressed(u32 vk)
 	const s8 pressed = inputKeyPressed(vk);
 	const s32 result = pressed && !vkPrevState[vk];
 	vkPrevState[vk] = pressed;
+	if (result && vk < VK_TOTAL_COUNT && vkForced[vk]) {
+		/* the game acted on the forced key */
+		vkForcedConsumed[vk] = 1;
+	}
 	return result;
 }
 
@@ -1256,10 +1463,21 @@ void inputMouseGetRawDelta(s32 *dx, s32 *dy)
 void inputMouseGetScaledDelta(f32* dx, f32* dy)
 {
 	f32 mdx = 0.f, mdy = 0.f;
+#ifdef __ANDROID__
+	/*
+	 * The on-screen look area provides the movement directly, so it works
+	 * whether or not the real mouse is locked.
+	 */
+	if (mouseDX || mouseDY) {
+		mdx = mouseDX * (0.022f / 3.5f) * mouseSensX;
+		mdy = mouseDY * (0.022f / 3.5f) * mouseSensY;
+	}
+#else
 	if (mouseLocked) {
 		mdx = mouseDX * (0.022f / 3.5f) * mouseSensX;
 		mdy = mouseDY * (0.022f / 3.5f) * mouseSensY;
 	}
+#endif
 	if (dx) *dx = mdx;
 	if (dy) *dy = mdy;
 }
