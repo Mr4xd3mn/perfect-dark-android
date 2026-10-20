@@ -188,6 +188,16 @@ ROM is picked, and not an archive or a ROM with a different byte order.
 adb uninstall org.sdl2.perfectdark
 ```
 
+### The build fails to download the toolchain
+
+The setup script downloads CMake, Ninja, a JDK, the Android SDK and the NDK,
+and one of those addresses may have moved. Check them without downloading
+anything:
+
+```
+python3 android/tools/setup/setup.py --check-urls
+```
+
 ## How the port works on Android
 
 * `port/src/main.c` defines `main()`, which `SDL_main.h` renames to
