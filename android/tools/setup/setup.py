@@ -59,21 +59,61 @@ def extract(archive, dest):
     """Unpack a zip or tarball into dest."""
     log(f"extracting {os.path.basename(archive)}")
     if archive.endswith(".zip"):
-        with zipfile.ZipFile(archive) as z:
-            z.extractall(dest)
+        extract_zip(archive, dest)
     else:
-        with tarfile.open(archive) as t:
-            t.extractall(dest)
-    # zipfile does not preserve the executable bit
-    for root, _, files in os.walk(dest):
-        for name in files:
-            path = os.path.join(root, name)
-            if os.path.splitext(name)[1] in ("", ".sh") and not IS_WINDOWS:
+        extract_tar(archive, dest)
+
+
+def extract_zip(archive, dest):
+    """
+    Unpacks a zip, keeping symbolic links and the permission bits.
+
+    The Android NDK for Linux ships its tools as links - bin/clang points at
+    bin/clang-14, and there are a lot of them. Python's zipfile does not
+    restore links, it writes the target of the link as the content of the
+    file instead, and the NDK's compiler then fails with "clang-14: not
+    found". The same goes for the permission bits, without which the tools
+    are not executable.
+    """
+    with zipfile.ZipFile(archive) as z:
+        for info in z.infolist():
+            path = os.path.join(dest, info.filename)
+            mode = info.external_attr >> 16
+
+            if stat.S_ISLNK(mode):
+                # A link: the target is stored as the content of the entry.
+                target = z.read(info).decode("utf-8", "replace")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                if os.path.lexists(path):
+                    os.remove(path)
                 try:
-                    st = os.stat(path)
-                    os.chmod(path, st.st_mode | stat.S_IEXEC)
+                    os.symlink(target, path)
+                except (OSError, NotImplementedError, AttributeError):
+                    # Windows without developer mode: write the target out
+                    # as a plain file instead.
+                    with open(path, "w") as f:
+                        f.write(target)
+                continue
+
+            z.extract(info, dest)
+
+            if mode & 0o777 and not IS_WINDOWS:
+                # Windows has no executable bit, and setting a file
+                # read-only there would only get in the way.
+                try:
+                    os.chmod(path, mode & 0o777)
                 except OSError:
                     pass
+
+
+def extract_tar(archive, dest):
+    """Unpacks a tarball. The permissions are kept as they are."""
+    with tarfile.open(archive) as t:
+        try:
+            t.extractall(dest, filter="data")
+        except TypeError:
+            # Python older than 3.12 has no filters.
+            t.extractall(dest)
 
 
 def find_subdir(parent, prefix):
