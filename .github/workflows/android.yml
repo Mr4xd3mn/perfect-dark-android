@@ -35,6 +35,9 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Check the download URLs
+        run: python3 android/tools/setup/setup.py --check-urls
+
       - name: Set up the toolchain
         run: |
           python3 android/tools/setup/setup.py --deps "$DEPS"
