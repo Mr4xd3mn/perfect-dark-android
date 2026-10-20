@@ -2,6 +2,21 @@ plugins {
     id 'com.android.application'
 }
 
+// The signing key is not in the repository. Put its location and the
+// passwords in android/local.properties, which is not tracked, or set the
+// same names in the environment.
+def signingProps = new Properties()
+def signingPropsFile = rootProject.file("local.properties")
+if (signingPropsFile.exists()) {
+    signingProps.load(new FileInputStream(signingPropsFile))
+}
+["PDA_STORE_FILE", "PDA_STORE_PASSWORD", "PDA_KEY_ALIAS", "PDA_KEY_PASSWORD"].each { key ->
+    if (System.getenv(key)) {
+        signingProps.setProperty(key, System.getenv(key))
+    }
+}
+def haveSigningKey = signingProps["PDA_STORE_FILE"] != null
+
 android {
     namespace "org.sdl2.perfectdark"
     compileSdk 34
@@ -23,6 +38,14 @@ android {
         debug {
             // Debug keystore is generated automatically by the Android Gradle Plugin.
         }
+        release {
+            if (haveSigningKey) {
+                storeFile file(signingProps["PDA_STORE_FILE"])
+                storePassword signingProps["PDA_STORE_PASSWORD"]
+                keyAlias signingProps["PDA_KEY_ALIAS"]
+                keyPassword signingProps["PDA_KEY_PASSWORD"]
+            }
+        }
     }
 
     buildTypes {
@@ -32,7 +55,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // TODO: configure a release signingConfig before building a release APK.
+            if (haveSigningKey) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
