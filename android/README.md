@@ -20,6 +20,9 @@ The following has been added on top of the desktop port:
   instead of the gamepad while a menu is open;
 * immersive fullscreen, with the orientation locked to landscape;
 * options for the on-screen controls, stored in `pd.ini`.
+* a dedicated **RELOAD** touch button, preserving existing saved button positions;
+* a launcher that imports a PC-port mod folder, remembers the selected mod,
+  and can disable it before starting the game.
 
 The following configurations are supported and tested:
 
@@ -28,8 +31,65 @@ The following configurations are supported and tested:
 * OpenGL ES 2.0 or newer;
 * OpenSL ES for audio.
 
-The build produces a debug APK. Release builds are not signed, so they have
-to be signed before they can be installed.
+The build produces a debug APK. Release builds use the signing configuration
+in `local.properties` or the `PDA_*` environment variables, when supplied.
+
+## Mods
+
+The launcher has **Play**, **Choose mod folder** and **Disable mod** buttons.
+Extract the mod first, then select its root folder (the one containing
+`modconfig.txt`, `files/`, `textures/`, `animations/`, `sequences/` or `segs/`).
+The system folder picker grants access only to the selected tree; no broad
+storage permission is requested. Importing runs off the UI thread.
+
+Files are copied recursively into a new private snapshot. A successful import
+replaces the saved selection; cancellation or a failed import keeps the previous
+mod. The original folder is never changed. Reimport after editing the source.
+The launcher passes the snapshot to the C port using `--moddir`, so the normal
+PC-port overlay and `modconfig.txt` loading are used. Files absent from the mod
+fall back to the base game. Saves and the ROM stay in their existing locations.
+
+Only data mods compatible with this PC-port revision are supported. Mods needing
+a different executable or the separate netplay branch will not work. Import is
+limited to 2 GB, 20,000 entries and 32 directory levels. ZIP import and multiple
+simultaneously enabled mods are not implemented.
+
+The game runs in its own process so closing it also clears the native mod caches.
+Returning to the launcher lets the player choose another mod before the next Play.
+
+### Mod import tests
+
+With an Android device or emulator connected, build the debug APK and test APK:
+
+```
+cd android
+./gradlew assembleDebug assembleDebugAndroidTest lintDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w org.sdl2.perfectdark.test/org.sdl2.perfectdark.ModTestRunner
+```
+
+Run these tests on a disposable debug installation: they replace its mod selection.
+The test-only DocumentsProvider supplies nested files, interrupted reads, invalid
+names, duplicate names, loops and an overly deep folder. Tests check saved selection,
+rollback, replacement, cleanup, disabling, and launcher startup without a ROM.
+They do not need a ROM and are never included in the release APK.
+
+An optional native smoke test uses the original wiki's G5 Car Park example.
+On a disposable debug installation, supply your own ROM in the app's private
+`files/pd.ntsc-final.z64` and push the extracted example folder so its config is
+at `/data/local/tmp/pd-g5-carpark/modconfig.txt`. Then run:
+
+```
+adb shell am instrument -w -e smoke true -e mod true org.sdl2.perfectdark.test/org.sdl2.perfectdark.ModTestRunner
+adb shell am instrument -w -e smoke true -e mod false org.sdl2.perfectdark.test/org.sdl2.perfectdark.ModTestRunner
+```
+
+These checks boot Chicago directly, verify the ROM and first render in `pd.log`,
+check that the example background is loaded externally (or that mods are disabled),
+and save `files/smoke-frame.png` before instrumentation ends. They do not prove a
+full playthrough or performance on physical hardware. The debug game writes `pd.log`;
+release builds do not enable this log automatically.
 
 ## The ROM
 
@@ -147,6 +207,7 @@ The game runs in landscape.
 | **R** | yellow | Aim mode |
 | **START** | white, top right | Pause menu |
 | **L** | yellow, top left | Alt fire |
+| **RELOAD** | pale blue | Reload (the PC control scheme's dedicated reload action) |
 
 A drag never fires the gun. A finger that goes down on a button and then
 moves is treated as a drag rather than a press, and the drag turns the
@@ -216,7 +277,6 @@ to match the system theme.
 
 ## Planned
 
-* [Mod support](https://github.com/Mr4xd3mn/perfect-dark-android/issues/1)
 * [Left and right handed control layouts](https://github.com/Mr4xd3mn/perfect-dark-android/issues/2)
 * [Gyro aiming](https://github.com/Mr4xd3mn/perfect-dark-android/issues/3)
 

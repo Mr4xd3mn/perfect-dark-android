@@ -154,6 +154,18 @@ s32 fsInit(void)
 	saveDir[FS_MAXPATH] = '\0';
 	strncpy(homeDir, saveDir, FS_MAXPATH);
 	homeDir[FS_MAXPATH] = '\0';
+	// The launcher imports a mod into private storage and passes its absolute
+	// path. SAF content URIs cannot be opened by the native file APIs.
+	const char *androidMod = sysArgGetString("--moddir");
+	if (androidMod && androidMod[0] == '/' && strlen(androidMod) <= FS_MAXPATH) {
+		struct stat st;
+		if (stat(androidMod, &st) == 0 && S_ISDIR(st.st_mode)) {
+			strcpy(modDir, androidMod);
+			sysLogPrintf(LOG_NOTE, " mod dir: %s", modDir);
+		} else {
+			sysLogPrintf(LOG_WARNING, "android: mod directory is unavailable: %s", androidMod);
+		}
+	}
 	sysLogPrintf(LOG_NOTE, "base dir: %s", baseDir);
 	sysLogPrintf(LOG_NOTE, "save dir: %s", saveDir);
 	return 0;

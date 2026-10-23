@@ -101,6 +101,7 @@ enum {
 	BTN_MENU_RIGHT,
 	BTN_MENU_OK,   // menu: confirm
 	BTN_MENU_BACK, // menu: back
+	BTN_RELOAD,    // append: preserve saved Touch.BtnN positions from older versions
 	BTN_COUNT
 };
 
@@ -162,6 +163,7 @@ static const TouchButton g_Btns[BTN_COUNT] = {
 	{ CONT_F,     "",      0.80f, 0.84f, 0.92f, -2.95f, -2.05f, 0.80f, ANCHOR_BL, 0, 0, 1 },
 	{ CONT_A,     "OK",    0.30f, 0.85f, 0.45f, -1.45f, -1.45f, 1.00f, ANCHOR_BR, 0, 0, 1 },
 	{ CONT_B,     "BACK",  0.95f, 0.35f, 0.35f, -4.05f, -1.45f, 0.90f, ANCHOR_BR, 0, 0, 1 },
+	{ BUTTON_RELOAD, "RELOAD", 0.70f, 0.82f, 0.95f, -5.35f, -5.35f, 0.95f, ANCHOR_BR, 0, 1, 0 },
 };
 
 typedef struct {
@@ -544,7 +546,7 @@ static s32 touchButtonVisible(s32 btn)
  * fire button is listed first so that it takes precedence in a tie.
  */
 static const s32 g_BtnOrder[BTN_COUNT] = {
-	BTN_Z, BTN_A, BTN_B, BTN_R, BTN_START, BTN_L,
+	BTN_Z, BTN_A, BTN_B, BTN_R, BTN_START, BTN_L, BTN_RELOAD,
 	BTN_MENU_OK, BTN_MENU_BACK,
 	BTN_MENU_UP, BTN_MENU_DOWN, BTN_MENU_LEFT, BTN_MENU_RIGHT
 };

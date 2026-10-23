@@ -20,7 +20,8 @@ separately.
 
 ## Installing
 
-Copy `app-debug.apk` to the device and open it, allowing "install from
+Download the signed APK from the [Android releases](https://github.com/Mr4xd3mn/perfect-dark-android/releases/latest)
+and open it on the device, allowing "install from
 unknown sources" when Android asks. It can also be installed with adb:
 
 ```
@@ -43,9 +44,25 @@ it does not end anything: the app asks whether the file should be picked
 again, and the only ways out are the *Exit* button and the system back
 button.
 
-The ROM is only asked for once. After that the game goes straight to the
-title screen. If the copy fails - the file was too small, or the wrong file
+The ROM is only asked for once. After that, tap **Play** in the launcher to
+start the game. If the copy fails - the file was too small, or the wrong file
 was picked - the app asks again on the next start.
+
+## Mods
+
+The app opens a launcher before the game. With no mod selected, tap **Play** for the original game.
+To use a mod, extract its ZIP on your device, tap **Choose mod folder**, then
+select the folder containing `modconfig.txt` or the mod's `files` / `textures`
+folders. Wait for the import to finish, then tap **Play**.
+
+The app remembers the selected mod. **Disable mod** returns to the original
+game. Cancelling the picker or a failed import keeps the previous selection.
+A private copy is used, so moving or deleting the original folder does not
+break the imported mod. Select it again to import updated files.
+
+Use data mods made for the PC port. Mods needing a different executable or
+netplay are not supported. Choose the actual mod folder, not its parent or
+the ZIP file. Imports use additional device storage (up to 2 GB).
 
 ## Controls
 
@@ -83,6 +100,7 @@ shoot by accident.
 | **R** | yellow | Aim mode |
 | **START** | white, top right | Pause menu |
 | **L** | yellow, top left | Alt fire |
+| **RELOAD** | pale blue, above the weapon buttons | Reload the current weapon |
 
 Buttons are held while they are touched, and light up when they are pressed.
 The layout can be changed to *Arc* or *Minimal* in the options.

@@ -58,7 +58,21 @@ public class SDLActivity extends org.libsdl.app.SDLActivity {
 
     @Override
     protected String[] getArguments() {
-        return new String[0];
+        java.util.ArrayList<String> arguments = new java.util.ArrayList<>();
+        File mod = ModStorage.validatedDirectory(this, getIntent().getStringExtra("mod_directory"));
+        if (mod != null) {
+            arguments.add("--moddir");
+            arguments.add(mod.getAbsolutePath());
+        }
+        if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            arguments.add("--log");
+            int testStage = getIntent().getIntExtra("test_boot_stage", -1);
+            if (testStage >= 0) {
+                arguments.add("--boot-stage");
+                arguments.add(Integer.toString(testStage));
+            }
+        }
+        return arguments.toArray(new String[0]);
     }
 
     @Override
@@ -68,6 +82,15 @@ public class SDLActivity extends org.libsdl.app.SDLActivity {
         applyImmersiveMode();
         // Let the native side find this activity, so it can ask for the ROM.
         nativeSetActivity(this);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // The C port keeps process-wide mod caches and exits via exit(0).
+        // Each Play must start with a fresh native state. The launcher runs
+        // in the main process and survives the dedicated game process.
+        if (isFinishing()) android.os.Process.killProcess(android.os.Process.myPid());
     }
 
     /**
